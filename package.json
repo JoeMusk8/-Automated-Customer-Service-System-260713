@@ -9,12 +9,17 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "imapflow": "^1.4.7",
+    "mailparser": "^3.9.14",
     "next": "15.5.20",
+    "nodemailer": "^9.0.3",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.4.6",
     "@types/node": "22.17.1",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "19.1.10",
     "@types/react-dom": "19.1.7",
     "typescript": "5.9.2"

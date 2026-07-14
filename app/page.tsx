@@ -167,12 +167,38 @@ function Dashboard({ projects, onAdd, onOpen, onEdit, onDelete }: { projects: Pr
 }
 
 function ProjectForm({ mode, project, onClose, onSave, notify }: { mode: "add" | "edit"; project: Project | null; onClose: () => void; onSave: (project: Omit<Project, "id" | "unread" | "payment">) => void; notify: (s: string) => void }) {
+  const [testingMailbox, setTestingMailbox] = useState(false);
+  const isKissly = project?.mailbox === "business@kissly.ai";
+  const defaultImapHost = isKissly ? "mail.emb666.com" : "imap.mailhostbox.com";
+  const defaultSmtpHost = isKissly ? "mail.emb666.com" : "smtp.mailhostbox.com";
+
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     onSave({ name: String(data.get("name")), website: String(data.get("website")), mailbox: String(data.get("mailbox")), backend: String(data.get("backend")), gems: String(data.get("gems")), defaultGems: Number(data.get("defaultGems")), status: String(data.get("status")) as "运行中" | "停用" });
   }
-  return <div className="modal-backdrop"><form className="modal large" onSubmit={submit}><div className="modal-title"><div><h2>{mode === "add" ? "新增项目" : "编辑项目"}</h2><p>每个项目独立配置客服邮箱与项目后台</p></div><button type="button" onClick={onClose}>关闭</button></div><div className="form-grid"><section><h3>基础信息</h3><label>项目名称<input name="name" required defaultValue={project?.name || ""} /></label><label>项目网站<input name="website" required defaultValue={project?.website || "https://"} /></label><label>项目状态<select name="status" defaultValue={project?.status || "运行中"}><option>运行中</option><option>停用</option></select></label><label>后台地址<input name="backend" required defaultValue={project?.backend || "https://"} /></label></section><section><h3>邮箱与赔偿设置</h3><label>客服邮箱<input name="mailbox" type="email" required defaultValue={project?.mailbox || ""} /></label><div className="split"><label>IMAP 服务器<input placeholder="待填写" /></label><label>SMTP 服务器<input placeholder="待填写" /></label></div><button type="button" onClick={() => notify("尚未填写邮箱连接信息")}>测试邮箱连接</button><label>宝石名称<input name="gems" required defaultValue={project?.gems || "Gems"} /></label><label>默认赔偿数量<input name="defaultGems" type="number" required defaultValue={project?.defaultGems || 500} /></label><button type="button" onClick={() => notify("尚未配置后台登录信息")}>测试后台登录</button></section></div><div className="modal-actions"><button type="button" onClick={onClose}>取消</button><button className="primary" type="submit">保存</button></div></form></div>;
+
+  async function testConnection(e: React.MouseEvent<HTMLButtonElement>) {
+    const mailbox = String(new FormData(e.currentTarget.form!).get("mailbox") || "").toLowerCase();
+    const mailboxId = mailbox === "business@xjoy.ai" ? "xjoy" : mailbox === "business@kissly.ai" ? "kissly" : null;
+    if (!mailboxId) {
+      notify("当前仅支持 business@xjoy.ai 和 business@kissly.ai");
+      return;
+    }
+
+    setTestingMailbox(true);
+    try {
+      const response = await fetch(`/api/mailboxes/${mailboxId}/test`, { method: "POST" });
+      const result = await response.json();
+      notify(response.ok ? `${mailbox} 收信和发信连接正常` : result.error || "邮箱连接失败");
+    } catch {
+      notify("无法连接邮箱测试接口");
+    } finally {
+      setTestingMailbox(false);
+    }
+  }
+
+  return <div className="modal-backdrop"><form className="modal large" onSubmit={submit}><div className="modal-title"><div><h2>{mode === "add" ? "新增项目" : "编辑项目"}</h2><p>每个项目独立配置客服邮箱与项目后台</p></div><button type="button" onClick={onClose}>关闭</button></div><div className="form-grid"><section><h3>基础信息</h3><label>项目名称<input name="name" required defaultValue={project?.name || ""} /></label><label>项目网站<input name="website" required defaultValue={project?.website || "https://"} /></label><label>项目状态<select name="status" defaultValue={project?.status || "运行中"}><option>运行中</option><option>停用</option></select></label><label>后台地址<input name="backend" required defaultValue={project?.backend || "https://"} /></label></section><section><h3>邮箱与赔偿设置</h3><label>客服邮箱<input name="mailbox" type="email" required defaultValue={project?.mailbox || ""} /></label><div className="split"><label>IMAP 服务器<input readOnly value={defaultImapHost} /></label><label>SMTP 服务器<input readOnly value={defaultSmtpHost} /></label></div><button type="button" disabled={testingMailbox} onClick={testConnection}>{testingMailbox ? "正在测试…" : "测试邮箱连接"}</button><label>宝石名称<input name="gems" required defaultValue={project?.gems || "Gems"} /></label><label>默认赔偿数量<input name="defaultGems" type="number" required defaultValue={project?.defaultGems || 500} /></label><button type="button" onClick={() => notify("尚未配置后台登录信息")}>测试后台登录</button></section></div><div className="modal-actions"><button type="button" onClick={onClose}>取消</button><button className="primary" type="submit">保存</button></div></form></div>;
 }
 
 function ConfirmModal({ project, onCancel, onConfirm }: { project: Project; onCancel: () => void; onConfirm: () => void }) {
