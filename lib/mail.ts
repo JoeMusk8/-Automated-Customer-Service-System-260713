@@ -10,6 +10,12 @@ import {
   sendKisslyMessage,
   testKisslyApi,
 } from "./kissly-api";
+import {
+  isXjoyRoundcubeConfigured,
+  listXjoyMessages,
+  sendXjoyMessage,
+  testXjoyRoundcube,
+} from "./xjoy-roundcube";
 
 function assertConfigured(mailbox: MailboxConfig) {
   if (!mailbox.auth.user || !mailbox.auth.pass) {
@@ -40,6 +46,7 @@ function smtpClient(mailbox: MailboxConfig) {
 
 export async function testMailbox(mailbox: MailboxConfig) {
   if (mailbox.id === "kissly" && isKisslyApiConfigured()) return testKisslyApi();
+  if (mailbox.id === "xjoy" && isXjoyRoundcubeConfigured()) return testXjoyRoundcube();
   assertConfigured(mailbox);
   const imap = imapClient(mailbox);
   let imapConnected = false;
@@ -57,6 +64,7 @@ export async function testMailbox(mailbox: MailboxConfig) {
 
 export async function listRecentMessages(mailbox: MailboxConfig, limit = 30) {
   if (mailbox.id === "kissly" && isKisslyApiConfigured()) return listKisslyMessages(limit);
+  if (mailbox.id === "xjoy" && isXjoyRoundcubeConfigured()) return listXjoyMessages(limit);
   assertConfigured(mailbox);
   const imap = imapClient(mailbox);
   await imap.connect();
@@ -101,6 +109,7 @@ export async function listRecentMessages(mailbox: MailboxConfig, limit = 30) {
 
 export async function sendMailboxMessage(mailbox: MailboxConfig, input: { to: string; subject: string; text: string; html?: string }) {
   if (mailbox.id === "kissly" && isKisslyApiConfigured()) return sendKisslyMessage(input);
+  if (mailbox.id === "xjoy" && isXjoyRoundcubeConfigured()) return sendXjoyMessage(input);
   assertConfigured(mailbox);
   const result = await smtpClient(mailbox).sendMail({
     from: mailbox.address,
