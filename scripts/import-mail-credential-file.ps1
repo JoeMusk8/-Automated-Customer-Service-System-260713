@@ -50,9 +50,9 @@ function Value-Or([string]$Name, [string]$Fallback) {
   return $Fallback
 }
 
-$xjoyImapHost = Value-Or "XJOY_IMAP_HOST" "imap.mailhostbox.com"
+$xjoyImapHost = Value-Or "XJOY_IMAP_HOST" "us3.imap.mailhostbox.com"
 $xjoyImapPort = Value-Or "XJOY_IMAP_PORT" "993"
-$xjoySmtpHost = Value-Or "XJOY_SMTP_HOST" "smtp.mailhostbox.com"
+$xjoySmtpHost = Value-Or "XJOY_SMTP_HOST" "us3.smtp.mailhostbox.com"
 $xjoySmtpPort = Value-Or "XJOY_SMTP_PORT" "587"
 $kisslyImapHost = Value-Or "KISSLY_IMAP_HOST" "mail.emb666.com"
 $kisslyImapPort = Value-Or "KISSLY_IMAP_PORT" "993"

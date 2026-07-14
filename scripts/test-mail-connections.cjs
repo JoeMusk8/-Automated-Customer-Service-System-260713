@@ -1,7 +1,8 @@
 const { ImapFlow } = require("imapflow");
 const nodemailer = require("nodemailer");
 
-const mailboxes = ["XJOY", "KISSLY"];
+const requested = process.argv.slice(2).map((value) => value.toUpperCase());
+const mailboxes = requested.length ? requested : ["XJOY", "KISSLY"];
 
 function safeError(error) {
   return {
@@ -27,6 +28,7 @@ function safeError(error) {
       greetingTimeout: 15000,
       socketTimeout: 20000,
     });
+    imap.on("error", () => undefined);
     try {
       await imap.connect();
       result.imap = { ok: true };

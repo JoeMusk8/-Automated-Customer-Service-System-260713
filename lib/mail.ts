@@ -12,13 +12,15 @@ function assertConfigured(mailbox: MailboxConfig) {
 }
 
 function imapClient(mailbox: MailboxConfig) {
-  return new ImapFlow({
+  const client = new ImapFlow({
     host: mailbox.imap.host,
     port: mailbox.imap.port,
     secure: mailbox.imap.secure,
     auth: mailbox.auth,
     logger: false,
   });
+  client.on("error", () => undefined);
+  return client;
 }
 
 function smtpClient(mailbox: MailboxConfig) {

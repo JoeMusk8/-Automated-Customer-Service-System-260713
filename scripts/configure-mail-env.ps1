@@ -67,10 +67,10 @@ $values.MAIL_SEND_API_TOKEN = New-SecureToken
 $localLines = @(
   Format-EnvLine "MAIL_XJOY_USER" $values.MAIL_XJOY_USER
   Format-EnvLine "MAIL_XJOY_PASSWORD" $values.MAIL_XJOY_PASSWORD
-  "MAIL_XJOY_IMAP_HOST=imap.mailhostbox.com"
+  "MAIL_XJOY_IMAP_HOST=us3.imap.mailhostbox.com"
   "MAIL_XJOY_IMAP_PORT=993"
   "MAIL_XJOY_IMAP_SECURE=true"
-  "MAIL_XJOY_SMTP_HOST=smtp.mailhostbox.com"
+  "MAIL_XJOY_SMTP_HOST=us3.smtp.mailhostbox.com"
   "MAIL_XJOY_SMTP_PORT=587"
   "MAIL_XJOY_SMTP_SECURE=false"
   Format-EnvLine "MAIL_KISSLY_USER" $values.MAIL_KISSLY_USER

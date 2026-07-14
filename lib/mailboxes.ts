@@ -26,8 +26,8 @@ const definitions = {
     projectId: "x-pink" as const,
     address: "business@xjoy.ai",
     prefix: "XJOY",
-    imapHost: "imap.mailhostbox.com",
-    smtpHost: "smtp.mailhostbox.com",
+    imapHost: "us3.imap.mailhostbox.com",
+    smtpHost: "us3.smtp.mailhostbox.com",
   },
   kissly: {
     projectId: "kissly" as const,
@@ -78,4 +78,3 @@ export function getMailboxStatus() {
     };
   });
 }
-
