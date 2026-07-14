@@ -72,7 +72,10 @@ export function getMailboxStatus() {
       id,
       projectId: mailbox.projectId,
       address: mailbox.address,
-      configured: Boolean(mailbox.auth.user && mailbox.auth.pass),
+      configured: Boolean(
+        mailbox.auth.user &&
+          (mailbox.auth.pass || (id === "kissly" && process.env.MAIL_KISSLY_API_TOKEN?.trim())),
+      ),
       imapHost: mailbox.imap.host,
       smtpHost: mailbox.smtp.host,
     };

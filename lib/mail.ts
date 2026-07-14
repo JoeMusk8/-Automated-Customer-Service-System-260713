@@ -4,6 +4,12 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 import type { MailboxConfig } from "./mailboxes";
+import {
+  isKisslyApiConfigured,
+  listKisslyMessages,
+  sendKisslyMessage,
+  testKisslyApi,
+} from "./kissly-api";
 
 function assertConfigured(mailbox: MailboxConfig) {
   if (!mailbox.auth.user || !mailbox.auth.pass) {
@@ -33,6 +39,7 @@ function smtpClient(mailbox: MailboxConfig) {
 }
 
 export async function testMailbox(mailbox: MailboxConfig) {
+  if (mailbox.id === "kissly" && isKisslyApiConfigured()) return testKisslyApi();
   assertConfigured(mailbox);
   const imap = imapClient(mailbox);
   let imapConnected = false;
@@ -49,6 +56,7 @@ export async function testMailbox(mailbox: MailboxConfig) {
 }
 
 export async function listRecentMessages(mailbox: MailboxConfig, limit = 30) {
+  if (mailbox.id === "kissly" && isKisslyApiConfigured()) return listKisslyMessages(limit);
   assertConfigured(mailbox);
   const imap = imapClient(mailbox);
   await imap.connect();
@@ -92,6 +100,7 @@ export async function listRecentMessages(mailbox: MailboxConfig, limit = 30) {
 }
 
 export async function sendMailboxMessage(mailbox: MailboxConfig, input: { to: string; subject: string; text: string; html?: string }) {
+  if (mailbox.id === "kissly" && isKisslyApiConfigured()) return sendKisslyMessage(input);
   assertConfigured(mailbox);
   const result = await smtpClient(mailbox).sendMail({
     from: mailbox.address,
