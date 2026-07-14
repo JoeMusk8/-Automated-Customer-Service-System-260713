@@ -4,6 +4,7 @@ node_modules
 .env*
 !.env.example
 npm-debug.log*
+.next-dev*.log
 *.tsbuildinfo
 .mail-secrets.local
 

@@ -108,9 +108,7 @@ export async function listKisslyMessages(limit = 30) {
   });
   const listed = Array.isArray(result.data) ? result.data.slice(0, Math.min(limit, 100)) : [];
 
-  const messages = [];
-  for (const listedMessage of listed) {
-    if (listedMessage.uid == null) continue;
+  const messages = await Promise.all(listed.filter((message) => message.uid != null).map(async (listedMessage) => {
     let detail: KisslyMessageDetail = listedMessage;
     try {
       const detailResult = await post<KisslyMessageDetail>("/user_msg/show_mail", {
@@ -123,7 +121,7 @@ export async function listKisslyMessages(limit = 30) {
     }
 
     const html = detail.body?.html || "";
-    messages.push({
+    return {
       uid: Number(listedMessage.uid) || String(listedMessage.uid),
       mailboxId: "kissly" as const,
       projectId: "kissly" as const,
@@ -138,8 +136,8 @@ export async function listKisslyMessages(limit = 30) {
         contentType: file.type || "application/octet-stream",
         size: file.size || 0,
       })),
-    });
-  }
+    };
+  }));
   return messages;
 }
 

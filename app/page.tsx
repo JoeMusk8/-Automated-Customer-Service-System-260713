@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type PageKey = "dashboard" | "project" | "workbench" | "review" | "payments" | "reports" | "settings";
-type Priority = "高" | "中" | "低";
+type Priority = "未评估";
 type Project = {
   id: string;
   name: string;
@@ -14,37 +14,49 @@ type Project = {
   gems: string;
   defaultGems: number;
   unread: number;
-  payment: number;
+  connected: boolean;
 };
 type Mail = {
-  id: number;
+  id: string;
   project: string;
+  mailboxId: "xjoy" | "kissly";
   sender: string;
   title: string;
   preview: string;
   original: string;
-  translation: string;
-  intent: string;
-  category: string;
+  html: string;
   priority: Priority;
   time: string;
-  account: string;
-  payment: string;
+  timestamp: number;
+  unread: boolean;
+  attachments: Array<{ filename: string; contentType: string; size: number }>;
+};
+
+type ApiMessage = {
+  uid: string | number;
+  mailboxId: "xjoy" | "kissly";
+  projectId: "x-pink" | "kissly";
+  from: string;
+  subject: string;
+  date: string;
+  text: string;
+  html: string;
+  unread: boolean;
+  attachments: Array<{ filename: string; contentType: string; size: number }>;
+};
+
+type MailboxResult = {
+  id: "xjoy" | "kissly";
+  projectId: "x-pink" | "kissly";
+  address: string;
+  connected: boolean;
+  error?: string;
+  messages: ApiMessage[];
 };
 
 const initialProjects: Project[] = [
-  { id: "x-pink", name: "x.pink", website: "https://www.x.pink/", mailbox: "business@xjoy.ai", backend: "https://www.xjoy.ai/x-admin/#/", status: "运行中", gems: "Gems", defaultGems: 500, unread: 36, payment: 8 },
-  { id: "kissly", name: "KISSLY", website: "https://www.kissly.ai/", mailbox: "business@kissly.ai", backend: "https://www.kissly.ai/x-admin/#/", status: "运行中", gems: "Gems", defaultGems: 500, unread: 25, payment: 5 },
-];
-
-const initialMails: Mail[] = [
-  { id: 1, project: "x-pink", sender: "user@example.com", title: "Payment issue", preview: "已支付 $89，但未收到 5000 Gems", original: "Hi, I just paid $89 but did not receive 5000 Gems. Please help me check my account.", translation: "您好，我刚支付了 89 美元，但没有收到 5000 Gems。请帮我检查账户。", intent: "客户表示已完成付款，但 Gems 未到账，需要核实充值记录。", category: "支付问题", priority: "高", time: "10:35", account: "已匹配 user@example.com", payment: "已查到充值记录：$89 / 5000 Gems / 成功" },
-  { id: 2, project: "x-pink", sender: "maria@example.com", title: "Generation result", preview: "生成结果不满意，希望补偿", original: "The generation result is not what I expected. The faces are distorted.", translation: "生成结果与我的预期不符，人物面部出现了变形。", intent: "客户对生成质量不满意，希望获得处理或补偿。", category: "产品投诉", priority: "中", time: "09:48", account: "已匹配 maria@example.com", payment: "不适用" },
-  { id: 3, project: "x-pink", sender: "unknown@example.com", title: "Did not receive gems", preview: "邮箱未匹配到产品账号", original: "I bought gems yesterday but cannot find them in my account.", translation: "我昨天购买了 Gems，但在账户中找不到。", intent: "客户反馈购买后未到账，但发件邮箱未匹配到产品账号。", category: "支付问题", priority: "高", time: "09:12", account: "未找到账号", payment: "等待客户提供登录邮箱或用户 ID" },
-  { id: 4, project: "x-pink", sender: "hana@example.jp", title: "Feature suggestion", preview: "希望增加批量处理功能", original: "複数の画像を一括で処理できる機能を追加してほしいです。", translation: "希望增加可以批量处理多张图片的功能。", intent: "客户提出产品功能建议。", category: "建议反馈", priority: "低", time: "08:51", account: "未查询", payment: "不适用" },
-  { id: 5, project: "x-pink", sender: "alex@example.com", title: "How to cancel", preview: "咨询如何取消订阅", original: "How can I cancel my subscription?", translation: "我该如何取消订阅？", intent: "客户咨询订阅取消方式。", category: "普通咨询", priority: "低", time: "08:20", account: "未查询", payment: "不适用" },
-  { id: 6, project: "x-pink", sender: "promo@example.com", title: "Marketing cooperation", preview: "营销推广邮件", original: "We can grow your traffic with our marketing package.", translation: "我们可以通过营销套餐提高您的流量。", intent: "与客服售后无关的营销邮件。", category: "垃圾邮件", priority: "低", time: "07:42", account: "不适用", payment: "不适用" },
-  { id: 7, project: "kissly", sender: "kissly.user@example.com", title: "Credits not received", preview: "购买后未收到 Credits", original: "I completed the purchase but my credits are still missing.", translation: "我已完成购买，但 Credits 仍未到账。", intent: "客户反馈支付后 Credits 未到账。", category: "支付问题", priority: "高", time: "10:08", account: "已匹配 kissly.user@example.com", payment: "未查到充值记录" },
+  { id: "x-pink", name: "x.pink", website: "https://www.x.pink/", mailbox: "business@xjoy.ai", backend: "https://www.xjoy.ai/x-admin/#/", status: "运行中", gems: "Gems", defaultGems: 500, unread: 0, connected: false },
+  { id: "kissly", name: "KISSLY", website: "https://www.kissly.ai/", mailbox: "business@kissly.ai", backend: "https://www.kissly.ai/x-admin/#/", status: "运行中", gems: "Gems", defaultGems: 500, unread: 0, connected: false },
 ];
 
 const navItems: { key: PageKey; label: string }[] = [
@@ -57,31 +69,98 @@ const navItems: { key: PageKey; label: string }[] = [
 ];
 
 export default function Home() {
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [accessDraft, setAccessDraft] = useState("");
+  const [loginError, setLoginError] = useState("");
   const [page, setPage] = useState<PageKey>("dashboard");
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [activeProject, setActiveProject] = useState<string>("all");
   const [projectModal, setProjectModal] = useState<"add" | "edit" | null>(null);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
-  const [selectedMail, setSelectedMail] = useState(1);
-  const [categoryFilter, setCategoryFilter] = useState("全部");
-  const [priorityFilter, setPriorityFilter] = useState("全部");
+  const [mails, setMails] = useState<Mail[]>([]);
+  const [selectedMail, setSelectedMail] = useState("");
   const [search, setSearch] = useState("");
-  const [reviewTab, setReviewTab] = useState<"mail" | "gems">("mail");
-  const [replyEditing, setReplyEditing] = useState(false);
-  const [reply, setReply] = useState("您好，我们确认您的 89 美元充值已成功，5000 Gems 已到账。请重新登录后查看。");
+  const [mailLoading, setMailLoading] = useState(true);
+  const [mailErrors, setMailErrors] = useState<Record<string, string>>({});
+  const [refreshedAt, setRefreshedAt] = useState("");
   const [toast, setToast] = useState("");
 
   const currentProject = projects.find((item) => item.id === activeProject) || projects[0];
-  const visibleMails = useMemo(() => initialMails.filter((mail) => {
+  const visibleMails = useMemo(() => mails.filter((mail) => {
     const projectMatch = activeProject === "all" || mail.project === activeProject;
-    const categoryMatch = categoryFilter === "全部" || mail.category === categoryFilter;
-    const priorityMatch = priorityFilter === "全部" || mail.priority === priorityFilter;
     const needle = search.toLowerCase();
     const searchMatch = !needle || `${mail.title} ${mail.sender} ${mail.preview}`.toLowerCase().includes(needle);
-    return projectMatch && categoryMatch && priorityMatch && searchMatch;
-  }), [activeProject, categoryFilter, priorityFilter, search]);
-  const mail = initialMails.find((item) => item.id === selectedMail) || visibleMails[0] || initialMails[0];
+    return projectMatch && searchMatch;
+  }), [activeProject, mails, search]);
+  const mail = mails.find((item) => item.id === selectedMail) || visibleMails[0] || null;
+
+  const loadMail = useCallback(async () => {
+    if (!accessToken) return;
+    setMailLoading(true);
+    try {
+      const response = await fetch("/api/workbench/messages?mailbox=all&limit=20", {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const result = await response.json() as { mailboxes?: MailboxResult[]; refreshedAt?: string; error?: string };
+      if (response.status === 401) {
+        sessionStorage.removeItem("mail-workbench-token");
+        setAccessToken("");
+        setLoginError("访问口令不正确，请重新输入 MAIL_READ_API_TOKEN");
+        return;
+      }
+      if (!response.ok || !result.mailboxes) throw new Error(result.error || "读取邮箱失败");
+
+      const nextMails = result.mailboxes.flatMap((box) => box.messages.map((message) => {
+        const date = new Date(message.date);
+        const original = message.text?.trim() || "（该邮件没有纯文本正文）";
+        return {
+          id: `${box.id}:${message.uid}`,
+          project: message.projectId,
+          mailboxId: box.id,
+          sender: message.from || "（发件人未知）",
+          title: message.subject || "（无主题）",
+          preview: original.replace(/\s+/g, " ").slice(0, 120),
+          original,
+          html: message.html || "",
+          priority: "未评估" as const,
+          time: Number.isNaN(date.getTime()) ? message.date : date.toLocaleString("zh-CN", { hour12: false }),
+          timestamp: Number.isNaN(date.getTime()) ? 0 : date.getTime(),
+          unread: message.unread,
+          attachments: message.attachments || [],
+        };
+      })).sort((a, b) => b.timestamp - a.timestamp);
+
+      setMails(nextMails);
+      setSelectedMail((current) => nextMails.some((item) => item.id === current) ? current : (nextMails[0]?.id || ""));
+      setMailErrors(Object.fromEntries(result.mailboxes.filter((box) => !box.connected).map((box) => [box.projectId, box.error || "连接失败"])));
+      setProjects((items) => items.map((project) => {
+        const box = result.mailboxes!.find((item) => item.projectId === project.id);
+        return box ? { ...project, connected: box.connected, unread: box.messages.filter((message) => message.unread).length } : project;
+      }));
+      setRefreshedAt(result.refreshedAt || new Date().toISOString());
+    } catch (error) {
+      setMailErrors({ all: error instanceof Error ? error.message : "读取邮箱失败" });
+    } finally {
+      setMailLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    setAccessToken(sessionStorage.getItem("mail-workbench-token") || "");
+  }, []);
+
+  useEffect(() => { if (accessToken) void loadMail(); }, [accessToken, loadMail]);
+
+  if (accessToken === null) return <div className="access-gate"><div className="panel">正在打开客服中心…</div></div>;
+  if (!accessToken) return <AccessGate value={accessDraft} error={loginError} onValue={setAccessDraft} onSubmit={() => {
+    const value = accessDraft.trim();
+    if (!value) return;
+    sessionStorage.setItem("mail-workbench-token", value);
+    setLoginError("");
+    setAccessToken(value);
+  }} />;
 
   function notify(message: string) {
     setToast(message);
@@ -110,12 +189,12 @@ export default function Home() {
     <div className="app-shell">
       <Sidebar page={page} activeProject={activeProject} currentProject={currentProject} onNavigate={setPage} />
       <main className="main-content">
-        {page === "dashboard" && <Dashboard projects={projects} onAdd={() => { setEditingProject(null); setProjectModal("add"); }} onOpen={openProject} onEdit={editProject} onDelete={setDeleteProject} />}
-        {page === "project" && <ProjectHome project={currentProject} onSwitch={(id) => { setActiveProject(id); }} projects={projects} onOpenMail={() => setPage("workbench")} />}
-        {page === "workbench" && <Workbench projects={projects} activeProject={activeProject} onProject={setActiveProject} mails={visibleMails} mail={mail} onMail={setSelectedMail} search={search} onSearch={setSearch} category={categoryFilter} onCategory={setCategoryFilter} priority={priorityFilter} onPriority={setPriorityFilter} reply={reply} onReply={setReply} editing={replyEditing} onEditing={setReplyEditing} notify={notify} />}
-        {page === "review" && <ReviewCenter tab={reviewTab} onTab={setReviewTab} project={currentProject} reply={reply} notify={notify} />}
+        {page === "dashboard" && <Dashboard projects={projects} totalMessages={mails.length} loading={mailLoading} onAdd={() => { setEditingProject(null); setProjectModal("add"); }} onOpen={openProject} onEdit={editProject} onDelete={setDeleteProject} />}
+        {page === "project" && <ProjectHome project={currentProject} mails={mails.filter((item) => item.project === currentProject.id)} error={mailErrors[currentProject.id]} onSwitch={(id) => { setActiveProject(id); }} projects={projects} onOpenMail={() => setPage("workbench")} />}
+        {page === "workbench" && <Workbench projects={projects} activeProject={activeProject} onProject={setActiveProject} mails={visibleMails} mail={mail} onMail={setSelectedMail} search={search} onSearch={setSearch} loading={mailLoading} errors={mailErrors} refreshedAt={refreshedAt} onRefresh={loadMail} />}
+        {page === "review" && <EmptyFeature title="人工审核中心" text="当前没有真实的待审核记录。提交真实回复或赔偿申请后才会显示在这里。" />}
         {page === "payments" && <PaymentMonitor projects={projects} activeProject={activeProject} onProject={setActiveProject} />}
-        {page === "reports" && <Reports activeProject={activeProject} projects={projects} onProject={setActiveProject} />}
+        {page === "reports" && <EmptyFeature title="客服工作报告" text="当前没有真实的处理报告。系统不会再显示演示报告。" />}
         {page === "settings" && <ProjectSettings projects={projects} onAdd={() => { setEditingProject(null); setProjectModal("add"); }} onEdit={editProject} />}
       </main>
 
@@ -123,7 +202,7 @@ export default function Home() {
         if (projectModal === "edit" && editingProject) {
           setProjects((items) => items.map((item) => item.id === editingProject.id ? { ...item, ...value } : item));
         } else {
-          setProjects((items) => [...items, { ...value, id: `project-${Date.now()}`, unread: 0, payment: 0 }]);
+          setProjects((items) => [...items, { ...value, id: `project-${Date.now()}`, unread: 0, connected: false }]);
         }
         setProjectModal(null);
         notify(projectModal === "edit" ? "项目设置已保存" : "新项目已添加");
@@ -139,7 +218,7 @@ function Sidebar({ page, activeProject, currentProject, onNavigate }: { page: Pa
   return <aside className="sidebar">
     <div className="brand"><strong>AI 客服中心</strong><span>多项目客服中台 · V1.0</span></div>
     <nav>{navItems.map((item) => <button key={item.key} className={page === item.key ? "nav-active" : ""} onClick={() => onNavigate(item.key)}>{item.label}</button>)}</nav>
-    <div className="sidebar-status"><strong>{activeProject === "all" ? "人工确认模式" : currentProject.mailbox}</strong><span><i /> 邮箱连接待配置</span><span><i className="gray" /> 后台连接待配置</span></div>
+    <div className="sidebar-status"><strong>{activeProject === "all" ? "真实邮箱数据" : currentProject.mailbox}</strong><span><i className={currentProject.connected ? "" : "gray"} /> 邮箱{currentProject.connected ? "已连接" : "未连接"}</span><span><i className="gray" /> 项目后台未接入</span></div>
   </aside>;
 }
 
@@ -151,22 +230,21 @@ function Metric({ label, value, tag, tone = "neutral" }: { label: string; value:
   return <div className="metric-card"><span>{label}</span><strong>{value}</strong>{tag && <em className={`pill ${tone}`}>{tag}</em>}</div>;
 }
 
-function Dashboard({ projects, onAdd, onOpen, onEdit, onDelete }: { projects: Project[]; onAdd: () => void; onOpen: (p: Project) => void; onEdit: (p: Project) => void; onDelete: (p: Project) => void }) {
+function Dashboard({ projects, totalMessages, loading, onAdd, onOpen, onEdit, onDelete }: { projects: Project[]; totalMessages: number; loading: boolean; onAdd: () => void; onOpen: (p: Project) => void; onEdit: (p: Project) => void; onDelete: (p: Project) => void }) {
   const unread = projects.reduce((sum, item) => sum + item.unread, 0);
-  const payment = projects.reduce((sum, item) => sum + item.payment, 0);
   return <>
-    <Header title="全部项目 Dashboard" subtitle="统一查看所有项目的客服状态" action={<button className="primary" onClick={onAdd}>＋ 新增项目</button>} />
-    <section className="metric-grid four"><Metric label="未处理邮件" value={unread} tag={`${projects.length} 个项目`} /><Metric label="支付问题" value={payment} tag="最高优先级" tone="red" /><Metric label="待审核回复" value={9} tag="需人工确认" tone="amber" /><Metric label="待审核赔偿" value={4} tag="需人工确认" tone="amber" /></section>
+    <Header title="全部项目 Dashboard" subtitle="邮箱数据来自当前真实收件箱；项目后台数据尚未接入" action={<button className="primary" onClick={onAdd}>＋ 新增项目</button>} />
+    <section className="metric-grid four"><Metric label="已加载邮件" value={loading ? "…" : totalMessages} tag={`${projects.length} 个邮箱`} /><Metric label="未读邮件" value={loading ? "…" : unread} /><Metric label="待审核回复" value={0} tag="真实记录" /><Metric label="待审核赔偿" value={0} tag="后台未接入" /></section>
     <section className="dashboard-columns">
       <div className="panel dashboard-fixed-panel"><div className="panel-title"><h2>项目管理</h2><span>共 {projects.length} 个项目</span></div><div className="project-scroll">
-        {projects.map((project) => <article className="project-row" key={project.id}><div className="project-info"><h3>{project.name}</h3><a href={project.website} target="_blank">{project.website}</a><span>邮箱：{project.mailbox} · <b className="dot" /> 待配置</span><span>后台：{project.backend.replace("https://", "")} · <b className="dot" /> 待配置</span></div><span className="pill red">{project.payment} 个高优先级</span><div className="row-actions"><button className="primary" onClick={() => onOpen(project)}>进入管理</button><button onClick={() => onEdit(project)}>编辑</button><button className="danger" onClick={() => onDelete(project)}>删除</button></div></article>)}
+        {projects.map((project) => <article className="project-row" key={project.id}><div className="project-info"><h3>{project.name}</h3><a href={project.website} target="_blank">{project.website}</a><span>邮箱：{project.mailbox} · <b className="dot" /> {project.connected ? "已连接" : "连接失败"}</span><span>后台：{project.backend.replace("https://", "")} · <b className="dot" /> 未接入</span></div><span className={`pill ${project.connected ? "green" : "red"}`}>{project.unread} 封未读</span><div className="row-actions"><button className="primary" onClick={() => onOpen(project)}>进入管理</button><button onClick={() => onEdit(project)}>编辑</button><button className="danger" onClick={() => onDelete(project)}>删除</button></div></article>)}
       </div></div>
-      <div className="panel dashboard-fixed-panel"><div className="panel-title"><h2>跨项目重点问题</h2></div><div className="issues-scroll"><table><thead><tr><th>项目</th><th>问题</th><th>数量</th><th>状态</th></tr></thead><tbody><tr><td>x.pink</td><td>充值成功未到账</td><td>8</td><td><span className="pill red">高</span></td></tr><tr><td>KISSLY</td><td>未查到支付记录</td><td>5</td><td><span className="pill red">高</span></td></tr><tr><td>x.pink</td><td>生成结果不满意</td><td>14</td><td><span className="pill amber">中</span></td></tr></tbody></table></div><div className="warning">项目数据相互隔离；切换项目后，邮件、账号和后台查询结果全部重新切换。</div></div>
+      <div className="panel dashboard-fixed-panel"><div className="panel-title"><h2>真实数据范围</h2></div><div className="issues-scroll"><div className="empty-state"><h3>邮箱已接入</h3><p>当前只展示真实邮件、发件人、主题、正文、时间、未读状态和附件元数据。</p><h3>项目后台未接入</h3><p>账号匹配、支付记录、到账状态、AI 分类和赔偿记录暂不生成结论。</p></div></div></div>
     </section>
   </>;
 }
 
-function ProjectForm({ mode, project, onClose, onSave, notify }: { mode: "add" | "edit"; project: Project | null; onClose: () => void; onSave: (project: Omit<Project, "id" | "unread" | "payment">) => void; notify: (s: string) => void }) {
+function ProjectForm({ mode, project, onClose, onSave, notify }: { mode: "add" | "edit"; project: Project | null; onClose: () => void; onSave: (project: Omit<Project, "id" | "unread" | "connected">) => void; notify: (s: string) => void }) {
   const [testingMailbox, setTestingMailbox] = useState(false);
   const isKissly = project?.mailbox === "business@kissly.ai";
   const defaultImapHost = isKissly ? "mail.emb666.com" : "imap.mailhostbox.com";
@@ -205,42 +283,30 @@ function ConfirmModal({ project, onCancel, onConfirm }: { project: Project; onCa
   return <div className="modal-backdrop"><div className="modal confirm"><h2>确认删除？</h2><p>停止监控项目“{project.name}”，默认保留历史工作报告。</p><div className="modal-actions"><button onClick={onCancel}>取消</button><button className="danger solid" onClick={onConfirm}>确认删除</button></div></div></div>;
 }
 
-function ProjectHome({ project, projects, onSwitch, onOpenMail }: { project: Project; projects: Project[]; onSwitch: (s: string) => void; onOpenMail: () => void }) {
-  return <><Header title={`${project.name} 客服首页`} subtitle={`${project.mailbox} · 数据仅属于 ${project.name}`} action={<select className="project-select" value={project.id} onChange={(e) => onSwitch(e.target.value)}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>} /><section className="metric-grid six"><Metric label="今日未读邮件" value={project.unread} /><Metric label="支付问题" value={project.payment} tag="高优先级" tone="red" /><Metric label="产品投诉" value={14} /><Metric label="等待客户账号" value={3} /><Metric label="待审核回复" value={5} /><Metric label="待审核赔偿" value={7} /></section><section className="dashboard-columns"><div className="panel"><div className="panel-title"><h2>重点工单</h2><button onClick={onOpenMail}>查看全部邮件</button></div><table><tbody><tr><td>user@example.com</td><td>支付成功未到账</td><td><span className="pill red">高</span></td></tr><tr><td>unknown@example.com</td><td>等待客户账号</td><td><span className="pill amber">等待</span></td></tr><tr><td>maria@example.com</td><td>产品体验投诉</td><td><span className="pill amber">中</span></td></tr></tbody></table></div><div className="panel"><div className="panel-title"><h2>连接状态</h2></div><div className="status-list"><div><strong>客服邮箱</strong><span>{project.mailbox}</span><em className="pill amber">待配置</em></div><div><strong>项目后台</strong><span>{project.backend}</span><em className="pill amber">待配置</em></div><div><strong>网页连接器</strong><span>后台无公开 API</span><em className="pill neutral">未连接</em></div></div></div></section></>;
+function ProjectHome({ project, projects, mails, error, onSwitch, onOpenMail }: { project: Project; projects: Project[]; mails: Mail[]; error?: string; onSwitch: (s: string) => void; onOpenMail: () => void }) {
+  return <><Header title={`${project.name} 客服首页`} subtitle={`${project.mailbox} · 当前显示真实邮箱数据`} action={<select className="project-select" value={project.id} onChange={(e) => onSwitch(e.target.value)}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>} /><section className="metric-grid four"><Metric label="已加载邮件" value={mails.length} /><Metric label="未读邮件" value={project.unread} /><Metric label="待审核回复" value={0} /><Metric label="真实支付记录" value="未接入" /></section><section className="dashboard-columns"><div className="panel"><div className="panel-title"><h2>最近邮件</h2><button onClick={onOpenMail}>查看全部邮件</button></div>{error ? <div className="warning">{error}</div> : mails.length ? <table><tbody>{mails.slice(0, 5).map((mail) => <tr key={mail.id}><td>{mail.sender}</td><td>{mail.title}</td><td><span className={`pill ${mail.unread ? "amber" : "neutral"}`}>{mail.unread ? "未读" : "已读"}</span></td></tr>)}</tbody></table> : <div className="empty-state">收件箱当前没有邮件</div>}</div><div className="panel"><div className="panel-title"><h2>连接状态</h2></div><div className="status-list"><div><strong>客服邮箱</strong><span>{project.mailbox}</span><em className={`pill ${project.connected ? "green" : "red"}`}>{project.connected ? "已连接" : "连接失败"}</em></div><div><strong>项目后台</strong><span>{project.backend}</span><em className="pill neutral">未接入</em></div><div><strong>数据说明</strong><span>不显示任何演示结论</span><em className="pill green">真实数据</em></div></div></div></section></>;
 }
 
-function Workbench({ projects, activeProject, onProject, mails, mail, onMail, search, onSearch, category, onCategory, priority, onPriority, reply, onReply, editing, onEditing, notify }: { projects: Project[]; activeProject: string; onProject: (s: string) => void; mails: Mail[]; mail: Mail; onMail: (n: number) => void; search: string; onSearch: (s: string) => void; category: string; onCategory: (s: string) => void; priority: string; onPriority: (s: string) => void; reply: string; onReply: (s: string) => void; editing: boolean; onEditing: (b: boolean) => void; notify: (s: string) => void }) {
-  return <><Header title="全部邮件工作台" subtitle="显示当前项目的全部邮件，AI 结果仅作为处理辅助" action={<select className="project-select" value={activeProject} onChange={(e) => onProject(e.target.value)}><option value="all">全部项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>} /><div className="workbench">
-    <section className="mail-list"><input className="search" value={search} onChange={(e) => onSearch(e.target.value)} placeholder="搜索邮件" /><div className="filter-row"><select value={category} onChange={(e) => onCategory(e.target.value)}><option>全部</option><option>支付问题</option><option>产品投诉</option><option>建议反馈</option><option>普通咨询</option><option>垃圾邮件</option></select><select value={priority} onChange={(e) => onPriority(e.target.value)}><option>全部</option><option>高</option><option>中</option><option>低</option></select></div><div className="mail-count">全部 {mails.length}</div><div className="mail-scroll">{mails.map((item) => <button key={item.id} className={`mail-item ${item.id === mail.id ? "selected" : ""}`} onClick={() => onMail(item.id)}><div><strong>{item.title}</strong><span className={`pill ${item.priority === "高" ? "red" : item.priority === "中" ? "amber" : "neutral"}`}>{item.priority}</span></div><small>{item.sender} · {item.time}</small><p>{item.preview}</p></button>)}</div></section>
-    <section className="message-detail"><div className="detail-block"><div className="eyebrow">原始邮件</div><h2>{mail.title}</h2><p className="muted">来自 {mail.sender} · {mail.time}</p><p>{mail.original}</p></div><div className="detail-block green-block"><div className="eyebrow">中文翻译</div><p>{mail.translation}</p></div><div className="detail-block"><div className="eyebrow">客户诉求</div><p>{mail.intent}</p><div className="tag-row"><span className="pill red">{mail.category}</span><span className="pill neutral">优先级 {mail.priority}</span></div></div><div className="detail-block"><div className="eyebrow">附件</div><p className="muted">此邮件没有附件</p></div></section>
-    <section className="action-panel"><h2>处理方案</h2><div className="action-section"><label>客户邮箱</label><div className="field-readonly">{mail.sender}</div><button onClick={() => notify(mail.account)}>查询账号</button></div><div className="action-section"><label>账号匹配结果</label><div className={mail.account.includes("未找到") ? "result warning-result" : "result success-result"}>{mail.account}</div><button onClick={() => notify(mail.payment)}>查询充值</button></div><div className="action-section"><label>充值查询结果</label><div className="field-readonly multiline">{mail.payment}</div></div><div className="action-section"><label>AI 处理建议</label><div className="field-readonly multiline">{mail.account === "未找到账号" ? "询问客户的登录邮箱或用户 ID，收到信息后再查询。" : mail.category === "支付问题" ? "根据后台查询结果回复客户；发送前必须人工审核。" : "正常回复，必要时提交宝石赔偿审核。"}</div><button onClick={() => notify("AI 已重新分析当前邮件")}>重新分析</button></div><div className="action-section"><label>AI 回复草稿</label>{editing ? <textarea value={reply} onChange={(e) => onReply(e.target.value)} /> : <div className="field-readonly multiline">{reply}</div>}<div className="button-row"><button onClick={() => onEditing(!editing)}>{editing ? "完成编辑" : "编辑回复"}</button><button className="primary" onClick={() => notify("回复已提交人工审核，尚未发送")}>提交发信审核</button></div></div><div className="action-section"><label>赔偿方案</label><div className="field-readonly">当前支付记录正常，不建议赔偿。</div><button onClick={() => notify("赔偿方案已提交人工审核，尚未执行")}>提交赔偿审核</button></div><button className="full" onClick={() => notify("工单已转人工处理")}>转人工</button></section>
+function Workbench({ projects, activeProject, onProject, mails, mail, onMail, search, onSearch, loading, errors, refreshedAt, onRefresh }: { projects: Project[]; activeProject: string; onProject: (s: string) => void; mails: Mail[]; mail: Mail | null; onMail: (id: string) => void; search: string; onSearch: (s: string) => void; loading: boolean; errors: Record<string, string>; refreshedAt: string; onRefresh: () => Promise<void> }) {
+  const relevantError = activeProject === "all" ? errors.all : errors[activeProject];
+  return <><Header title="全部邮件工作台" subtitle="邮件主题、发件人、正文和时间均来自真实收件箱" action={<div className="button-row"><select className="project-select" value={activeProject} onChange={(e) => onProject(e.target.value)}><option value="all">全部项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><button onClick={() => void onRefresh()} disabled={loading}>{loading ? "正在同步…" : "刷新邮件"}</button></div>} /><div className="workbench">
+    <section className="mail-list"><input className="search" value={search} onChange={(e) => onSearch(e.target.value)} placeholder="搜索真实邮件" /><div className="mail-count">{loading ? "正在读取邮箱…" : `共 ${mails.length} 封`}{refreshedAt && <small> · 最后同步 {new Date(refreshedAt).toLocaleTimeString("zh-CN", { hour12: false })}</small>}</div>{relevantError && <div className="warning">{relevantError}</div>}<div className="mail-scroll">{mails.map((item) => <button key={item.id} className={`mail-item ${item.id === mail?.id ? "selected" : ""}`} onClick={() => onMail(item.id)}><div><strong>{item.title}</strong><span className={`pill ${item.unread ? "amber" : "neutral"}`}>{item.unread ? "未读" : "已读"}</span></div><small>{item.sender} · {item.time}</small><p>{item.preview}</p></button>)}{!loading && !mails.length && <div className="empty-state">当前筛选下没有邮件</div>}</div></section>
+    <section className="message-detail">{mail ? <><div className="detail-block"><div className="eyebrow">原始邮件</div><h2>{mail.title}</h2><p className="muted">来自 {mail.sender} · {mail.time}</p><p className="mail-body">{mail.original}</p></div><div className="detail-block"><div className="eyebrow">附件</div>{mail.attachments.length ? mail.attachments.map((file) => <p key={file.filename}>{file.filename} · {file.contentType} · {file.size} bytes</p>) : <p className="muted">此邮件没有附件</p>}</div></> : <div className="empty-state">请选择一封邮件</div>}</section>
+    <section className="action-panel"><h2>真实处理状态</h2>{mail ? <><div className="action-section"><label>客户邮箱</label><div className="field-readonly">{mail.sender}</div></div><div className="action-section"><label>所属邮箱</label><div className="field-readonly">{mail.mailboxId === "kissly" ? "business@kissly.ai" : "business@xjoy.ai"}</div></div><div className="action-section"><label>账号匹配</label><div className="field-readonly multiline">项目后台尚未接入，未执行真实查询。</div></div><div className="action-section"><label>支付与到账</label><div className="field-readonly multiline">项目后台尚未接入，不生成支付结论。</div></div><div className="action-section"><label>AI 分析与回复</label><div className="field-readonly multiline">当前尚未接入真实 AI 分析流程，因此不显示演示翻译、分类、建议或回复草稿。</div></div></> : <div className="empty-state">选择邮件后显示可核实的信息</div>}</section>
   </div></>;
 }
 
-function ReviewCenter({ tab, onTab, project, reply, notify }: { tab: "mail" | "gems"; onTab: (t: "mail" | "gems") => void; project: Project; reply: string; notify: (s: string) => void }) {
-  const [selectedReview, setSelectedReview] = useState<"x" | "kissly">("x");
-  const review = selectedReview === "x"
-    ? { project: project.name, account: tab === "mail" ? "user@example.com" : "maria@example.com", request: tab === "mail" ? "客户表示已支付 89 美元，但没有收到 5000 Gems。" : "客户对生成质量不满意，希望获得处理或补偿。", backend: tab === "mail" ? "已查到记录：$89 · 5000 Gems · 支付成功" : "账号已匹配，可提交赔偿审核", reply, success: true }
-    : { project: "KISSLY", account: "kissly.user@example.com", request: "客户表示已完成购买，但 Credits 仍未到账。", backend: "未查到充值记录", reply: "您好，我们暂未查询到您的充值记录。请提供登录邮箱、用户 ID 或支付凭证，我们会继续核查。", success: false };
-
-  return <><Header title="人工审核中心" subtitle="邮件发送和宝石赔偿分别确认，系统不会自动执行" /><div className="tabs"><button className={tab === "mail" ? "active" : ""} onClick={() => onTab("mail")}>邮件发送审核 <span>5</span></button><button className={tab === "gems" ? "active" : ""} onClick={() => onTab("gems")}>宝石赔偿审核 <span>4</span></button></div><div className="review-layout"><section className="panel review-list review-panel-fixed"><h2>{tab === "mail" ? "待审核回复" : "待审核赔偿"}</h2><div className="review-items-scroll"><button className={`review-item ${selectedReview === "x" ? "selected" : ""}`} onClick={() => setSelectedReview("x")}><strong>{tab === "mail" ? "x.pink Payment issue" : "x.pink Generation result"}</strong><span>{tab === "mail" ? "user@example.com" : "maria@example.com"}</span><small>{tab === "mail" ? "等待发送审核" : `建议赔偿 ${project.defaultGems} ${project.gems}`}</small></button><button className={`review-item ${selectedReview === "kissly" ? "selected" : ""}`} onClick={() => setSelectedReview("kissly")}><strong>KISSLY Credits not received</strong><span>kissly.user@example.com</span><small>等待人工确认</small></button></div></section><section className="panel review-detail review-panel-fixed"><div className="tag-row"><span className="pill green">{review.project}</span><span className="pill red">{tab === "mail" ? "支付问题" : "产品投诉"}</span></div><h2>{tab === "mail" ? "发送前确认" : "赔偿前确认"}</h2><dl><dt>项目与客户账号</dt><dd>{review.project} · {review.account}</dd><dt>原始诉求</dt><dd>{review.request}</dd><dt>后台查询结果</dt><dd className={review.success ? "success-result" : "warning-result"}>{review.backend}</dd>{tab === "mail" ? <><dt>将要发送的完整邮件</dt><dd>{review.reply}</dd></> : <><dt>赔偿数量和原因</dt><dd>{project.defaultGems} {project.gems} · 产品体验补偿</dd></>}</dl><div className="button-row end"><button className="danger" onClick={() => notify("审核已拒绝，未执行任何操作")}>拒绝</button><button onClick={() => notify("已退回修改")}>退回修改</button><button className="primary" onClick={() => notify(tab === "mail" ? "已批准发送；等待邮箱连接后执行" : "已批准赔偿；等待后台连接后执行")}>批准{tab === "mail" ? "发送" : "赔偿"}</button></div><div className="warning">批准只针对当前操作；发信与赔偿不能使用同一个按钮执行。</div></section></div></>;
-}
-
 function PaymentMonitor({ projects, activeProject, onProject }: { projects: Project[]; activeProject: string; onProject: (s: string) => void }) {
-  const rows = [{ project: "x.pink", user: "user@example.com", order: "XP-20260713-001", amount: "$89", time: "10:35", pay: "成功", delivery: "已到账", type: "充值成功" }, { project: "x.pink", user: "unknown@example.com", order: "—", amount: "—", time: "09:12", pay: "未查到记录", delivery: "无法判断", type: "未查到记录" }, { project: "KISSLY", user: "kissly.user@example.com", order: "KS-20260713-018", amount: "$29", time: "10:08", pay: "成功", delivery: "异常", type: "到账异常" }, { project: "x.pink", user: "error@example.com", order: "—", amount: "—", time: "08:32", pay: "查询失败", delivery: "无法判断", type: "查询失败" }].filter((row) => activeProject === "all" || row.project.toLowerCase().replace(".", "-") === activeProject);
-  return <><Header title="支付问题监控" subtitle="支付查询失败时显示“无法判断”，不生成充值结论" action={<select className="project-select" value={activeProject} onChange={(e) => onProject(e.target.value)}><option value="all">全部项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>} /><section className="metric-grid four"><Metric label="充值成功" value={7} tag="已核实" tone="green" /><Metric label="未查到记录" value={3} tag="等待客户信息" tone="amber" /><Metric label="到账异常" value={2} tag="高优先级" tone="red" /><Metric label="查询失败" value={1} tag="无法判断" /></section><section className="panel payment-panel-fixed"><div className="panel-title"><h2>高优先级支付工单</h2><span>{activeProject === "all" ? "全部项目" : projects.find((p) => p.id === activeProject)?.name}</span></div><div className="table-scroll"><table><thead><tr><th>项目</th><th>客户账号</th><th>订单号</th><th>金额</th><th>时间</th><th>支付状态</th><th>到账状态</th></tr></thead><tbody>{rows.map((row) => <tr key={row.user}><td>{row.project}</td><td>{row.user}</td><td>{row.order}</td><td>{row.amount}</td><td>{row.time}</td><td><span className={`pill ${row.pay === "成功" ? "green" : row.pay === "查询失败" ? "red" : "amber"}`}>{row.pay}</span></td><td>{row.delivery}</td></tr>)}</tbody></table></div><div className="warning">后台查询失败的工单只能转人工处理，不能显示为充值成功或失败。</div></section></>;
+  return <><Header title="支付问题监控" subtitle="项目后台尚未接入，因此不展示任何推测或演示支付记录" action={<select className="project-select" value={activeProject} onChange={(e) => onProject(e.target.value)}><option value="all">全部项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>} /><section className="metric-grid four"><Metric label="真实支付记录" value={0} tag="后台未接入" /><Metric label="已核实到账" value={0} /><Metric label="到账异常" value={0} /><Metric label="查询失败" value={0} /></section><section className="panel payment-panel-fixed"><div className="empty-state"><h2>暂无真实支付数据</h2><p>需要接入 x.pink 和 KISSLY 的项目后台查询接口后，才能显示订单、金额、支付状态和到账状态。</p></div></section></>;
 }
 
-function Reports({ activeProject, projects, onProject }: { activeProject: string; projects: Project[]; onProject: (s: string) => void }) {
-  const [selectedReport, setSelectedReport] = useState<"payment" | "generation">("payment");
-  const report = selectedReport === "payment"
-    ? { title: "Payment issue", priority: "高优先级", priorityClass: "red", customer: "user@example.com", type: "支付问题", intent: "客户支付 89 美元后未收到 5000 Gems。", original: "Hi, I just paid $89 but did not receive 5000 Gems.", translation: "您好，我刚支付了 89 美元，但没有收到 5000 Gems。", account: "已匹配 user@example.com", payment: "订单 XP-20260713-001 · $89 · 支付成功 · 已到账", reply: "我们确认您的充值已成功，5000 Gems 已到账。请重新登录后查看。", compensation: "未赔偿", result: "已核实充值并提交回复审核", timeline: "系统生成 10:36 → 人工审核 10:42 → 等待邮箱连接" }
-    : { title: "Generation result", priority: "中优先级", priorityClass: "amber", customer: "maria@example.com", type: "产品投诉", intent: "客户对生成质量不满意，希望获得处理或补偿。", original: "The generation result is not what I expected. The faces are distorted.", translation: "生成结果与我的预期不符，人物面部出现了变形。", account: "已匹配 maria@example.com", payment: "不适用", reply: "尚未发送", compensation: "待审核", result: "处理中", timeline: "系统生成 → 等待人工处理" };
-
-  return <><Header title="客服工作报告" subtitle="每封邮件生成独立报告，记录完整处理过程" action={<div className="button-row"><select className="project-select" value={activeProject} onChange={(e) => onProject(e.target.value)}><option value="all">全部项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><button onClick={() => window.print()}>导出 PDF</button></div>} /><div className="report-toolbar"><input placeholder="搜索客户邮箱或工单" /><select><option>全部投诉类型</option><option>支付问题</option><option>产品投诉</option><option>建议反馈</option><option>普通咨询</option></select><select><option>全部处理状态</option><option>处理中</option><option>已完成</option></select></div><div className="report-layout"><section className="panel report-list"><h2>工作报告</h2><div className="report-items-scroll"><button className={`review-item ${selectedReport === "payment" ? "selected" : ""}`} onClick={() => setSelectedReport("payment")}><strong>Payment issue</strong><span>user@example.com</span><small>x.pink · 已完成</small></button><button className={`review-item ${selectedReport === "generation" ? "selected" : ""}`} onClick={() => setSelectedReport("generation")}><strong>Generation result</strong><span>maria@example.com</span><small>x.pink · 处理中</small></button></div></section><article className="panel report"><div className="panel-title"><div><span className="pill green">x.pink</span><h2>{report.title}</h2></div><span className={`pill ${report.priorityClass}`}>{report.priority}</span></div><div className="report-grid"><ReportField label="项目 / 客服邮箱" text="x.pink · business@xjoy.ai" /><ReportField label="客户邮箱" text={report.customer} /><ReportField label="投诉类型" text={report.type} /><ReportField label="客户诉求" text={report.intent} /><ReportField label="来信原文" text={report.original} /><ReportField label="中文翻译" text={report.translation} /><ReportField label="账号匹配结果" text={report.account} /><ReportField label="充值查询结果" text={report.payment} /><ReportField label="回信内容" text={report.reply} /><ReportField label="赔偿记录" text={report.compensation} /><ReportField label="处理结果" text={report.result} /><ReportField label="审核人与时间线" text={report.timeline} /></div></article></div></>;
+function EmptyFeature({ title, text }: { title: string; text: string }) {
+  return <><Header title={title} subtitle="仅显示已经由真实数据源产生的记录" /><section className="panel"><div className="empty-state"><h2>暂无真实记录</h2><p>{text}</p></div></section></>;
 }
 
-function ReportField({ label, text }: { label: string; text: string }) { return <div><strong>{label}</strong><p>{text}</p></div>; }
+function AccessGate({ value, error, onValue, onSubmit }: { value: string; error: string; onValue: (value: string) => void; onSubmit: () => void }) {
+  return <div className="access-gate"><form className="panel access-card" onSubmit={(event) => { event.preventDefault(); onSubmit(); }}><h1>AI 客服中心</h1><p>请输入本项目的邮件读取口令。口令是 Vercel 和本地环境中的 <code>MAIL_READ_API_TOKEN</code>，只保存在当前浏览器会话。</p><label>访问口令<input type="password" autoComplete="current-password" value={value} onChange={(event) => onValue(event.target.value)} autoFocus /></label>{error && <div className="warning">{error}</div>}<button className="primary" type="submit">进入客服中心</button></form></div>;
+}
 
 function ProjectSettings({ projects, onAdd, onEdit }: { projects: Project[]; onAdd: () => void; onEdit: (p: Project) => void }) {
   return <><Header title="项目设置" subtitle="每个项目独立配置邮箱、后台和赔偿规则" action={<button className="primary" onClick={onAdd}>＋ 新增项目</button>} /><section className="panel settings-list">{projects.map((project) => <article key={project.id}><div><h2>{project.name}</h2><p>{project.website}</p></div><div><span>客服邮箱</span><strong>{project.mailbox}</strong></div><div><span>后台地址</span><strong>{project.backend}</strong></div><div><span>默认赔偿</span><strong>{project.defaultGems} {project.gems}</strong></div><button onClick={() => onEdit(project)}>编辑设置</button></article>)}</section></>;
