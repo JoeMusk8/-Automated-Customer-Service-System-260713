@@ -8,11 +8,6 @@ export const dynamic = "force-dynamic";
 const mailboxIds = ["xjoy", "kissly"] as const;
 
 export async function GET(request: Request) {
-  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!process.env.MAIL_READ_API_TOKEN || token !== process.env.MAIL_READ_API_TOKEN) {
-    return NextResponse.json({ error: "访问口令无效" }, { status: 401 });
-  }
-
   const url = new URL(request.url);
   const requested = url.searchParams.get("mailbox") || "all";
   const requestedLimit = Number(url.searchParams.get("limit") || 20);

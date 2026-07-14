@@ -69,9 +69,6 @@ const navItems: { key: PageKey; label: string }[] = [
 ];
 
 export default function Home() {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [accessDraft, setAccessDraft] = useState("");
-  const [loginError, setLoginError] = useState("");
   const [page, setPage] = useState<PageKey>("dashboard");
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [activeProject, setActiveProject] = useState<string>("all");
@@ -96,20 +93,10 @@ export default function Home() {
   const mail = mails.find((item) => item.id === selectedMail) || visibleMails[0] || null;
 
   const loadMail = useCallback(async () => {
-    if (!accessToken) return;
     setMailLoading(true);
     try {
-      const response = await fetch("/api/workbench/messages?mailbox=all&limit=20", {
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      const response = await fetch("/api/workbench/messages?mailbox=all&limit=20", { cache: "no-store" });
       const result = await response.json() as { mailboxes?: MailboxResult[]; refreshedAt?: string; error?: string };
-      if (response.status === 401) {
-        sessionStorage.removeItem("mail-workbench-token");
-        setAccessToken("");
-        setLoginError("访问口令不正确，请重新输入 MAIL_READ_API_TOKEN");
-        return;
-      }
       if (!response.ok || !result.mailboxes) throw new Error(result.error || "读取邮箱失败");
 
       const nextMails = result.mailboxes.flatMap((box) => box.messages.map((message) => {
@@ -145,22 +132,9 @@ export default function Home() {
     } finally {
       setMailLoading(false);
     }
-  }, [accessToken]);
-
-  useEffect(() => {
-    setAccessToken(sessionStorage.getItem("mail-workbench-token") || "");
   }, []);
 
-  useEffect(() => { if (accessToken) void loadMail(); }, [accessToken, loadMail]);
-
-  if (accessToken === null) return <div className="access-gate"><div className="panel">正在打开客服中心…</div></div>;
-  if (!accessToken) return <AccessGate value={accessDraft} error={loginError} onValue={setAccessDraft} onSubmit={() => {
-    const value = accessDraft.trim();
-    if (!value) return;
-    sessionStorage.setItem("mail-workbench-token", value);
-    setLoginError("");
-    setAccessToken(value);
-  }} />;
+  useEffect(() => { void loadMail(); }, [loadMail]);
 
   function notify(message: string) {
     setToast(message);
@@ -302,10 +276,6 @@ function PaymentMonitor({ projects, activeProject, onProject }: { projects: Proj
 
 function EmptyFeature({ title, text }: { title: string; text: string }) {
   return <><Header title={title} subtitle="仅显示已经由真实数据源产生的记录" /><section className="panel"><div className="empty-state"><h2>暂无真实记录</h2><p>{text}</p></div></section></>;
-}
-
-function AccessGate({ value, error, onValue, onSubmit }: { value: string; error: string; onValue: (value: string) => void; onSubmit: () => void }) {
-  return <div className="access-gate"><form className="panel access-card" onSubmit={(event) => { event.preventDefault(); onSubmit(); }}><h1>AI 客服中心</h1><p>请输入本项目的邮件读取口令。口令是 Vercel 和本地环境中的 <code>MAIL_READ_API_TOKEN</code>，只保存在当前浏览器会话。</p><label>访问口令<input type="password" autoComplete="current-password" value={value} onChange={(event) => onValue(event.target.value)} autoFocus /></label>{error && <div className="warning">{error}</div>}<button className="primary" type="submit">进入客服中心</button></form></div>;
 }
 
 function ProjectSettings({ projects, onAdd, onEdit }: { projects: Project[]; onAdd: () => void; onEdit: (p: Project) => void }) {
